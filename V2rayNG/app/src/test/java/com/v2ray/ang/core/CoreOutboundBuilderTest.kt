@@ -31,6 +31,18 @@ class CoreOutboundBuilderTest {
     private fun createProfile(mode: String?): ProfileItem =
         ProfileItem.create(EConfigType.VLESS).apply { dialMode = mode }
 
+
+    @Test
+    fun convertRefusesAProfileWithJsonThatIsNotAFinalMask() {
+        val profile = ProfileItem.create(EConfigType.SOCKS).apply {
+            server = "192.0.2.1"
+            serverPort = "1080"
+            finalMask = """{"tag":"proxy"}"""
+        }
+
+        assertNull(CoreOutboundBuilder.convert(profile))
+    }
+
     @Test
     fun aMuxConcurrencyFieldThatHoldsNoNumberFallsBackToTheDefault() {
         assertEquals(16, CoreOutboundBuilder.muxConcurrency("16", 8))

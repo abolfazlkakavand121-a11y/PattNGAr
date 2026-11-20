@@ -23,6 +23,12 @@ object CoreOutboundBuilder {
 
     /** Dispatches a profile to protocol-specific outbound builder. */
     fun convert(profileItem: ProfileItem): OutboundBean? {
+        // Imported and subscription profiles bypass the editor; never pass a structurally invalid mask to Xray.
+        if (!FinalMaskValidation.isValid(profileItem.finalMask)) {
+            LogUtil.e(AppConfig.TAG, "Refusing to build an outbound with an invalid FinalMask structure")
+            return null
+        }
+
         val outbound = when (profileItem.configType) {
             EConfigType.VMESS -> toOutboundVmess(profileItem)
             EConfigType.SHADOWSOCKS -> toOutboundShadowsocks(profileItem)
