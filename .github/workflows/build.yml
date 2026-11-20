@@ -183,7 +183,7 @@ jobs:
       uses: actions/checkout@v7
       with:
         repository: abolfazlkakavand121-a11y/AndroidLibXrayLite
-        ref: 432d8041901cd4c2dcdb867fd01db1d3ff9041fe
+        ref: 5e7a13c2720566bb9d987b89cadf9572524e622f
         path: AndroidLibXrayLite-custom
         persist-credentials: false
 
