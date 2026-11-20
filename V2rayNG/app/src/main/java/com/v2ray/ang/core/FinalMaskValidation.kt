@@ -36,8 +36,28 @@ object FinalMaskValidation {
         "udphop",
     )
 
-    private val rootKeys = setOf("tcp", "udp", "quicParams")
-    private val quicParamKeys = setOf("congestion", "brutalUp", "brutalDown")
+    private val tcpKeys = setOf("tcp", "tcp4", "tcp6")
+    private val udpKeys = setOf("udp", "udp4", "udp6")
+    private val rootKeys = tcpKeys + udpKeys + "quicParams"
+    private val quicParamKeys = setOf(
+        "congestion",
+        "debug",
+        "bbrProfile",
+        "brutalUp",
+        "brutalDown",
+        "brutalDisableLossCompensation",
+        "initStreamReceiveWindow",
+        "maxStreamReceiveWindow",
+        "initConnectionReceiveWindow",
+        "maxConnectionReceiveWindow",
+        "maxIdleTimeout",
+        "keepAlivePeriod",
+        "disablePathMTUDiscovery",
+        "disableChromeParrot",
+        "disableGSO",
+        "maxIncomingStreams",
+        "disableStatelessReset",
+    )
 
     /**
      * A blank value means no mask and is valid. A nonblank value must contain at least one
@@ -56,22 +76,30 @@ object FinalMaskValidation {
         val config = root.asJsonObject
         if (config.keySet().isEmpty() || !rootKeys.containsAll(config.keySet())) return false
 
-        val tcp = config.get("tcp")
-        if (tcp != null && !validMasks(tcp, tcpTypes)) return false
-
-        val udp = config.get("udp")
-        if (udp != null && !validMasks(udp, udpTypes)) return false
+        for (key in tcpKeys) {
+            val masks = config.get(key) ?: continue
+            if (!validMasks(masks, tcpTypes)) return false
+        }
+        for (key in udpKeys) {
+            val masks = config.get(key) ?: continue
+            if (!validMasks(masks, udpTypes)) return false
+        }
 
         val quicParams = config.get("quicParams")
         if (quicParams != null && !validQuicParams(quicParams)) return false
 
-        val hasTcpMask = tcp?.takeIf { it.isJsonArray }?.asJsonArray?.isEmpty == false
-        val hasUdpMask = udp?.takeIf { it.isJsonArray }?.asJsonArray?.isEmpty == false
-        val hasQuicSettings = quicParams?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.isNotEmpty() == true
+        val hasTcpMask = tcpKeys.any { key -> config.get(key)?.let(::hasMasks) == true }
+        val hasUdpMask = udpKeys.any { key -> config.get(key)?.let(::hasMasks) == true }
+        // Even an empty QUIC params object is meaningful: Xray applies its default QUIC parameters.
+        val hasQuicSettings = quicParams?.isJsonObject == true
         return hasTcpMask || hasUdpMask || hasQuicSettings
     }
 
+    private fun hasMasks(element: JsonElement): Boolean =
+        element.isJsonArray && !element.asJsonArray.isEmpty
+
     private fun validMasks(element: JsonElement, allowedTypes: Set<String>): Boolean {
+        if (element.isJsonNull) return true
         if (!element.isJsonArray) return false
         return element.asJsonArray.all { item ->
             if (!item.isJsonObject) return@all false

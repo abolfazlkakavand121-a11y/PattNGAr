@@ -38,6 +38,22 @@ class FinalMaskValidationTest {
         assertTrue(FinalMaskValidation.isValid("""{"tcp":[],"udp":[{"type":"noise"}]}"""))
     }
 
+
+    @Test
+    fun acceptsAddressFamilySpecificMasksAndTheCompleteQuicParameterShape() {
+        assertTrue(FinalMaskValidation.isValid("""{"tcp4":[{"type":"tls-record","settings":{"recordVersion":771}}]}"""))
+        assertTrue(FinalMaskValidation.isValid("""{"tcp6":[{"type":"fragment","settings":{}}]}"""))
+        assertTrue(FinalMaskValidation.isValid("""{"udp4":[{"type":"noise","settings":{}}]}"""))
+        assertTrue(FinalMaskValidation.isValid("""{"udp6":[{"type":"salamander","settings":{}}]}"""))
+        assertTrue(FinalMaskValidation.isValid("""{"quicParams":{}}"""))
+        assertTrue(
+            FinalMaskValidation.isValid(
+                """{"quicParams":{"congestion":"bbr","debug":false,"bbrProfile":"standard","brutalUp":"10mbps","brutalDown":"20mbps","brutalDisableLossCompensation":false,"initStreamReceiveWindow":65536,"maxStreamReceiveWindow":1048576,"initConnectionReceiveWindow":65536,"maxConnectionReceiveWindow":1048576,"maxIdleTimeout":30,"keepAlivePeriod":10,"disablePathMTUDiscovery":false,"disableChromeParrot":false,"disableGSO":false,"maxIncomingStreams":100,"disableStatelessReset":false}}"""
+            )
+        )
+        assertTrue(FinalMaskValidation.isValid("""{"tcp":null,"tcp4":[{"type":"fragment","settings":{}}]}"""))
+    }
+
     @Test
     fun rejectsSyntacticallyValidJsonThatIsNotAFinalMask() {
         val invalid = listOf(
@@ -55,6 +71,9 @@ class FinalMaskValidationTest {
             """{"tcp":[{"type":"not-a-mask","settings":{}}]}""",
             """{"tcp":[{"type":"noise","settings":{}}]}""",
             """{"udp":[{"type":"tls-record","settings":{"recordVersion":769}}]}""",
+            """{"tcp4":[{"type":"noise","settings":{}}]}""",
+            """{"udp6":[{"type":"tls-record","settings":{"recordVersion":769}}]}""",
+            """{"quicParams":{"unknown":"value"}}""",
             """{"tcp":[{"type":"fragment","settings":[] }]}""",
             """{"tcp":[{"type":"fragment","settings":{},"tag":"proxy"}]}""",
             """{"tcp":[{"type":"fragment","settings":{}}],"unknown":true}""",
