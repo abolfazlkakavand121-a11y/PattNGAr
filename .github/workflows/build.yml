@@ -4,8 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
+        description: "Semantic version for the signed APKs, for example 2.4.2"
         required: false
         type: string
+      publish_release:
+        description: "Publish the signed APKs as a public GitHub Release"
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - master
@@ -469,8 +475,17 @@ jobs:
           (cd release-files && sha256sum *.apk > SHA256SUMS)
           echo "Verified ${#apks[@]} signed APK(s) with certificate SHA-256 $reference_cert"
 
+      - name: Upload production-signed release APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: pattng-release-${{ inputs.release_tag }}
+          path: release-files/*
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish signed GitHub release
         uses: softprops/action-gh-release@v2
+        if: inputs.publish_release == true
         with:
           tag_name: ${{ inputs.release_tag }}
           name: PattNG v${{ inputs.release_tag }}
