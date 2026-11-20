@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.server
 
 import com.v2ray.ang.AppResources
 import com.v2ray.ang.core.AetherExit
+import com.v2ray.ang.core.FinalMaskValidation
 import com.v2ray.ang.ui.server.FieldPresets.Match
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -139,12 +140,32 @@ class FieldPresetsTest {
     fun theFinalMaskFieldsOfferTheGivenFinalMasksEachLaidOutAsWrittenUnderItsName() {
         val names = AppResources.stringArray("final_mask_preset_names")
         val values = AppResources.stringArray("final_mask_preset_values").map(::readAsAapt)
-        assertEquals(listOf("tlshello-0-len (0-104-1-0-0-114-1-1-11)", "tlshello (6-98-1-0-0-114-1-1-11)", "udp-noise (rnd-24-1200-1230)", "merge"), names)
-        assertEquals(listOf(TLSHELLO_0_LEN, TLSHELLO, UDP_NOISE, MERGE), values)
+        assertEquals(
+            listOf(
+                "tls-record-version-0301",
+                "tls-record-version-0302",
+                "tls-record-version-0303",
+                "tls-record-version-differential-0303-0301",
+                "tls-sni-before-extension",
+                "tls-sni-extension-header",
+                "tls-sni-mid-hostname",
+                "tls-sni-after-extension",
+                "tlshello-0-len (0-104-1-0-0-114-1-1-11)",
+                "tlshello (6-98-1-0-0-114-1-1-11)",
+                "udp-noise (rnd-24-1200-1230)",
+                "merge"
+            ),
+            names
+        )
+        assertEquals(
+            listOf(TLS_RECORD_VERSION_0301, TLS_RECORD_VERSION_0302, TLS_RECORD_VERSION_0303, TLS_RECORD_VERSION_DIFFERENTIAL_0303_0301, TLS_SNI_BEFORE_EXTENSION, TLS_SNI_EXTENSION_HEADER, TLS_SNI_MID_HOSTNAME, TLS_SNI_AFTER_EXTENSION, TLSHELLO_0_LEN, TLSHELLO, UDP_NOISE, MERGE),
+            values
+        )
         // Each is one an exit-node takes, as an outbound does, and the list tells each apart from the others.
         val listed = FieldPresets(values, Match.JSON)
         values.forEachIndexed { index, value ->
             assertTrue(AetherExit.takesFinalMask(value), value)
+            assertTrue(FinalMaskValidation.isValid(value), value)
             assertEquals(index, listed.indexOf(value))
         }
     }
@@ -210,6 +231,70 @@ class FieldPresetsTest {
     }
 
     private companion object {
+        val TLS_RECORD_VERSION_0301 = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"recordVersion": 769}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_RECORD_VERSION_0302 = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"recordVersion": 770}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_RECORD_VERSION_0303 = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"recordVersion": 771}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_RECORD_VERSION_DIFFERENTIAL_0303_0301 = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"splitAt": 2, "firstFragmentVersion": 771, "remainingFragmentVersion": 769}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_BEFORE_EXTENSION = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "before-extension"}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_EXTENSION_HEADER = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "extension-header"}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_MID_HOSTNAME = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "mid-hostname"}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_AFTER_EXTENSION = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "after-extension"}}
+              ]
+            }
+        """.trimIndent()
+
         const val REAL_FIREFOX = "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:TLS_RSA_WITH_AES_128_GCM_SHA256:TLS_RSA_WITH_AES_256_GCM_SHA384:TLS_RSA_WITH_AES_128_CBC_SHA:TLS_RSA_WITH_AES_256_CBC_SHA"
 
         const val SEMI_PYTHON = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"

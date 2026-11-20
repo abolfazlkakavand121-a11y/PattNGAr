@@ -4,12 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
+        description: "Semantic version for the signed APKs, for example 2.4.2"
         required: false
         type: string
+      publish_release:
+        description: "Publish the signed APKs as a public GitHub Release"
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - master
       - my-releases
+      - feature/serverless-method-lab-v1
 
 permissions:
   contents: write
@@ -33,6 +40,27 @@ jobs:
         submodules: 'recursive'
         fetch-depth: '0'
 
+    - name: Verify canonical agent guides against upstream master
+      shell: bash
+      run: |
+        set -euo pipefail
+        UPSTREAM_URL="https://github.com/2dust/v2rayNG.git"
+        if git remote get-url upstream >/dev/null 2>&1; then
+          test "$(git remote get-url upstream)" = "$UPSTREAM_URL"
+        else
+          git remote add upstream "$UPSTREAM_URL"
+        fi
+        git fetch upstream master
+        GUIDE_PATHS=(
+          ':(glob)**/AGENTS.md'
+          ':(glob)**/CLAUDE.md'
+          ':(glob)**/GEMINI.md'
+          '.github/copilot-instructions.md'
+        )
+        git diff upstream/master -- "${GUIDE_PATHS[@]}"
+        test -z "$(git diff --cached --name-only -- "${GUIDE_PATHS[@]}")"
+        test -z "$(git diff --name-only upstream/master...HEAD -- "${GUIDE_PATHS[@]}")"
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
@@ -41,14 +69,23 @@ jobs:
         packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
 
     - name: Install NDK
+      shell: bash
       run: |
-        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-          --channel=0 \
-          --install "ndk;30.0.16248370"
-        echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
-        sed -i '10i\
-        \
-            ndkVersion = "30.0.16248370"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
+        set -euo pipefail
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
+        echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+        python3 - <<'PY'
+        from pathlib import Path
+        path = Path("V2rayNG/app/build.gradle.kts")
+        content = path.read_text()
+        marker = '    ndkVersion = "30.0.16248370"'
+        if marker not in content:
+            needle = "android {\n"
+            if content.count(needle) != 1:
+                raise SystemExit("Could not locate the Android Gradle block exactly once")
+            content = content.replace(needle, needle + marker + "\n", 1)
+            path.write_text(content)
+        PY
 
     - name: Restore cached libhevtun
       id: cache-libhevtun-restore
@@ -161,7 +198,7 @@ jobs:
       uses: actions/checkout@v7
       with:
         repository: abolfazlkakavand121-a11y/AndroidLibXrayLite
-        ref: d9a5f6de85db7e18312e7f884c946b23202e6b8f
+        ref: be9150659c3cbc7013cbaaa01d99811177ec419b
         path: AndroidLibXrayLite-custom
         persist-credentials: false
 
@@ -171,13 +208,17 @@ jobs:
         go-version-file: AndroidLibXrayLite-custom/go.mod
         cache-dependency-path: AndroidLibXrayLite-custom/go.sum
 
-    - name: Install gomobile and AndroidLib NDK
+    - name: Install pinned gomobile and AndroidLib NDK
       working-directory: AndroidLibXrayLite-custom
+      shell: bash
       run: |
-        go install golang.org/x/mobile/cmd/gomobile@latest
-        echo "$HOME/go/bin" >> $GITHUB_PATH
+        set -euo pipefail
+        MOBILE_VERSION="$(go list -m -f '{{.Version}}' golang.org/x/mobile)"
+        test -n "$MOBILE_VERSION"
+        go install "golang.org/x/mobile/cmd/gomobile@${MOBILE_VERSION}"
+        echo "$HOME/go/bin" >> "$GITHUB_PATH"
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;29.0.14206865"
-        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
 
     - name: Build custom libv2ray AAR
       working-directory: AndroidLibXrayLite-custom
@@ -207,7 +248,7 @@ jobs:
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
         # Run unit tests, then produce an installable debug-signed APK for validation.
-        # Permanent release signing is intentionally disabled until a private keystore is configured.
+        # This is a debug-only validation APK. Production release signing is handled by sign-and-release.
         ./gradlew :app:testPlaystoreDebugUnitTest
         ./gradlew :app:assemblePlaystoreDebug -PABI_FILTERS=arm64-v8a
 
@@ -224,12 +265,54 @@ jobs:
         entries=$(unzip -Z1 "$apk" | grep '^lib/' || true)
         echo "$(basename "$apk"):"
         echo "$entries" | sed 's/^/  /'
-        for lib in libaether.so libpsiphon-tunnel-core.so liblyrebird.so; do
+        for lib in libgojni.so libaether.so libpsiphon-tunnel-core.so liblyrebird.so; do
           if ! echo "$entries" | grep -qx "lib/arm64-v8a/$lib"; then
             echo "::error::$(basename "$apk") lacks lib/arm64-v8a/$lib"
             exit 1
           fi
         done
+
+    - name: Create a temporary CI-only Android signing key
+      shell: bash
+      run: |
+        set -euo pipefail
+        KEYSTORE_PATH="$RUNNER_TEMP/pattng-ci-smoke.jks"
+        KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
+        keytool -genkeypair -noprompt \
+          -keystore "$KEYSTORE_PATH" \
+          -storetype JKS \
+          -storepass "$KEYSTORE_PASSWORD" \
+          -alias pattng-ci-smoke \
+          -keypass "$KEYSTORE_PASSWORD" \
+          -keyalg RSA -keysize 2048 -validity 2 \
+          -dname "CN=PattNG CI Signing Smoke Test"
+        chmod 600 "$KEYSTORE_PATH"
+        {
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH"
+          echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+          echo "ANDROID_KEY_ALIAS=pattng-ci-smoke"
+          echo "ANDROID_KEY_PASSWORD=$KEYSTORE_PASSWORD"
+        } >> "$GITHUB_ENV"
+        echo "::add-mask::$KEYSTORE_PASSWORD"
+
+    - name: Build and verify a CI-only signed release APK
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ github.workspace }}/V2rayNG"
+        ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a -PpattngVersion=2.4.2
+        APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+        shopt -s nullglob
+        apks=(app/build/outputs/apk/playstore/release/*arm64-v8a*.apk)
+        if [[ "${#apks[@]}" -ne 1 ]]; then
+          echo "::error::Expected exactly one CI-only signed arm64 release APK, found ${#apks[@]}"
+          exit 1
+        fi
+        "$APK_SIGNER" verify --verbose "${apks[0]}"
+        # apksigner's human-readable certificate labels vary across build-tools
+        # versions/locales. The cryptographic verification above is authoritative.
+        "$APK_SIGNER" verify --print-certs "${apks[0]}"
+        sha256sum "${apks[0]}"
 
     - name: Upload arm64-v8a validation APK
       uses: actions/upload-artifact@v7
@@ -238,39 +321,173 @@ jobs:
         name: arm64-v8a-debug-validation
         path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/debug/*arm64-v8a*.apk
 
+    - name: Upload native libraries for signed release
+      uses: actions/upload-artifact@v7
+      if: ${{ success() }}
+      with:
+        name: pattng-native-libraries
+        path: ${{ github.workspace }}/V2rayNG/app/libs/
+        if-no-files-found: error
+        retention-days: 1
+
   sign-and-release:
     needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
     runs-on: ubuntu-26.04
-    if: false # Disabled: validation APK is debug-signed, not a distributable release
+    permissions:
+      contents: write
 
     steps:
-      - name: Download APK artifacts
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          submodules: 'false'
+
+      - name: Download native libraries built and tested by the validation job
         uses: actions/download-artifact@v8
         with:
-          path: release
+          name: pattng-native-libraries
+          path: ${{ github.workspace }}/V2rayNG/app/libs/
 
-      - name: Sign APK files
-        run: |
-          # Quiet: a plain import prints the key's user ID, name and email, into the public log.
-          printf '%s' "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --quiet --import
-          KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
-          mkdir -p release-files
-
-          find release -type f -name '*.apk' | while read apk; do
-            cp "$apk" release-files/
-            gpg --batch --yes --local-user "$KEY" --detach-sign --output "release-files/$(basename "$apk").sig" "$apk"
-          done
-
-          gpg --armor --export "$KEY" > release-files/PattNG-public-key.asc
-
-      - name: Upload APKs, signatures and public key to release
-        uses: svenstaro/upload-release-action@v2
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
         with:
-          file: release-files/*
-          tag: ${{ inputs.release_tag }}
-          release_name: PattNG v${{ inputs.release_tag }}
-          body: "."
-          target_commit: ${{ github.sha }}
-          file_glob: true
-          prerelease: true
-          overwrite: true
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '14742923'
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - name: Install NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("V2rayNG/app/build.gradle.kts")
+          content = path.read_text()
+          marker = '    ndkVersion = "30.0.16248370"'
+          if marker not in content:
+              needle = "android {\n"
+              if content.count(needle) != 1:
+                  raise SystemExit("Could not locate the Android Gradle block exactly once")
+              content = content.replace(needle, needle + marker + "\n", 1)
+              path.write_text(content)
+          PY
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Prepare Android release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          KEYSTORE_DIR="$RUNNER_TEMP/pattng-signing"
+          mkdir -p "$KEYSTORE_DIR"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_DIR/release.jks"
+          test -s "$KEYSTORE_DIR/release.jks"
+          chmod 600 "$KEYSTORE_DIR/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_DIR/release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build signed Play Store release APKs
+        shell: bash
+        env:
+          PATTNG_VERSION: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cd ${{ github.workspace }}/V2rayNG
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          if [[ ! "$PATTNG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release_tag must use semantic version format, for example 2.4.2"
+            exit 1
+          fi
+          # Aether, Psiphon and the pluggable transport are built for these three ABIs.
+          # 32-bit x86 is intentionally excluded until those native components support it.
+          ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS="arm64-v8a;armeabi-v7a;x86_64" -PpattngVersion="$PATTNG_VERSION"
+
+      - name: Verify APK signatures, ABIs and prepare checksums
+        shell: bash
+        env:
+          PATTNG_VERSION: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          APK_DIR="${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/release"
+          EXPECTED_ABIS=(arm64-v8a armeabi-v7a x86_64)
+          for abi in "${EXPECTED_ABIS[@]}"; do
+            apk="$APK_DIR/PattNG_${PATTNG_VERSION}_${abi}.apk"
+            if [[ ! -s "$apk" ]]; then
+              echo "::error::Missing release APK for supported ABI $abi"
+              exit 1
+            fi
+            entries="$(unzip -Z1 "$apk" | grep '^lib/' || true)"
+            for lib in libgojni.so libaether.so libpsiphon-tunnel-core.so liblyrebird.so libhev-socks5-tunnel.so libhevsockstun.so; do
+              if ! grep -qx "lib/$abi/$lib" <<< "$entries"; then
+                echo "::error::$(basename "$apk") lacks lib/$abi/$lib"
+                exit 1
+              fi
+            done
+          done
+          APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          test -x "$APK_SIGNER"
+          shopt -s nullglob
+          apks=("$APK_DIR"/*.apk)
+          if [[ "${#apks[@]}" -lt 1 ]]; then
+            echo "::error::No signed release APKs were produced"
+            exit 1
+          fi
+          mkdir -p release-files
+          reference_cert=""
+          for apk in "${apks[@]}"; do
+            "$APK_SIGNER" verify --verbose "$apk"
+            cert_output="$("$APK_SIGNER" verify --print-certs "$apk" 2>&1)"
+            cert="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}' <<< "$cert_output")"
+            if [[ -z "$cert" ]]; then
+              echo "::error::Could not read signing certificate for $(basename "$apk")"
+              exit 1
+            fi
+            if [[ -z "$reference_cert" ]]; then
+              reference_cert="$cert"
+            elif [[ "$cert" != "$reference_cert" ]]; then
+              echo "::error::Release APKs were signed with different certificates"
+              exit 1
+            fi
+            cp "$apk" release-files/
+          done
+          (cd release-files && sha256sum *.apk > SHA256SUMS)
+          echo "Verified ${#apks[@]} signed APK(s) with certificate SHA-256 $reference_cert"
+
+      - name: Upload production-signed release APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: pattng-release-${{ inputs.release_tag }}
+          path: release-files/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish signed GitHub release
+        uses: softprops/action-gh-release@v2
+        if: inputs.publish_release == true
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: PattNG v${{ inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: false
+          files: release-files/*

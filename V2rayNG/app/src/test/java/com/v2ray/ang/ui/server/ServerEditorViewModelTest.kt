@@ -74,6 +74,31 @@ class ServerEditorViewModelTest {
     }
 
     @Test
+    fun aProfileWithAValidFinalMaskIsStored() {
+        val viewModel = viewModel()
+        val profile = vless("masked").apply {
+            finalMask = """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}"""
+        }
+
+        viewModel.save(profile)
+
+        assertEquals(EditorOutcome.Saved("guid-1"), viewModel.outcome.value)
+        assertEquals(profile.finalMask, source.stored.getValue("guid-1").finalMask)
+    }
+
+    @Test
+    fun aProfileWithAJsonObjectThatIsNotAFinalMaskIsRefusedBeforeStorage() {
+        val viewModel = viewModel()
+        val profile = vless("invalid").apply { finalMask = """{"tag":"proxy"}""" }
+
+        viewModel.save(profile)
+
+        assertEquals(EditorOutcome.Refused(R.string.toast_malformed_json), viewModel.outcome.value)
+        assertTrue(source.saves.isEmpty())
+        assertTrue(source.stored.isEmpty())
+    }
+
+    @Test
     fun aStoredProfileIsWrittenOverAndKeepsItsSubscription() {
         source.stored["vless-guid"] = vless("old", subscription = "own")
         val viewModel = viewModel(guid = "vless-guid", subscriptionId = "sub")

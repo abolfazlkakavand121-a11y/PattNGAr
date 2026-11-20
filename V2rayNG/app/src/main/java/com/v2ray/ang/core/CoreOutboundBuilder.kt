@@ -23,6 +23,12 @@ object CoreOutboundBuilder {
 
     /** Dispatches a profile to protocol-specific outbound builder. */
     fun convert(profileItem: ProfileItem): OutboundBean? {
+        // Imported and subscription profiles bypass the editor; never pass a structurally invalid mask to Xray.
+        if (!FinalMaskValidation.isValid(profileItem.finalMask)) {
+            LogUtil.e(AppConfig.TAG, "Refusing to build an outbound with an invalid FinalMask structure")
+            return null
+        }
+
         val outbound = when (profileItem.configType) {
             EConfigType.VMESS -> toOutboundVmess(profileItem)
             EConfigType.SHADOWSOCKS -> toOutboundShadowsocks(profileItem)
@@ -947,14 +953,10 @@ object CoreOutboundBuilder {
 
     /** [updateOutboundFinalMask] with the finalMask JSON itself, as the exit-node of an Aether core takes its profile's. */
     fun updateOutboundFinalMask(streamSettings: OutboundBean.StreamSettingsBean, finalMask: String?) {
-        finalMask?.let {
-            val parsedFinalMask = JsonUtil.parseString(finalMask)
-            if (parsedFinalMask != null) {
-                streamSettings.finalmask = parsedFinalMask
-            } else {
-                LogUtil.w("V2rayConfigManager", "Invalid finalMask JSON, keeping previously generated finalmask")
-            }
-        }
+        if (finalMask.isNullOrBlank()) return
+        require(FinalMaskValidation.isValid(finalMask)) { "Invalid FinalMask structure" }
+        val parsedFinalMask = requireNotNull(JsonUtil.parseString(finalMask)) { "Invalid FinalMask JSON" }
+        streamSettings.finalmask = parsedFinalMask
     }
 
     /**

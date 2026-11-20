@@ -1,5 +1,6 @@
 package com.v2ray.ang.core
 
+import android.util.Log
 import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.V2rayConfig.OutboundBean
@@ -30,6 +31,32 @@ class CoreOutboundBuilderTest {
 
     private fun createProfile(mode: String?): ProfileItem =
         ProfileItem.create(EConfigType.VLESS).apply { dialMode = mode }
+
+
+    @Test
+    fun convertRefusesAProfileWithJsonThatIsNotAFinalMask() {
+        val profile = ProfileItem.create(EConfigType.SOCKS).apply {
+            server = "192.0.2.1"
+            serverPort = "1080"
+            finalMask = """{"tag":"proxy"}"""
+        }
+
+        mockStatic(Log::class.java).use {
+            assertNull(CoreOutboundBuilder.convert(profile))
+        }
+    }
+
+    @Test
+    fun updateOutboundFinalMaskRefusesAJsonObjectThatIsNotAFinalMask() {
+        val streamSettings = OutboundBean.StreamSettingsBean()
+
+        val failure = runCatching {
+            CoreOutboundBuilder.updateOutboundFinalMask(streamSettings, """{"tag":"proxy"}""")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertNull(streamSettings.finalmask)
+    }
 
     @Test
     fun aMuxConcurrencyFieldThatHoldsNoNumberFallsBackToTheDefault() {

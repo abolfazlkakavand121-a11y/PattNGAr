@@ -105,6 +105,16 @@ class AetherCoreTest {
     }
 
     @Test
+    fun anExitNodeTakesOnlyARecognizedFinalMaskStructure() {
+        assertTrue(AetherExit.takesFinalMask(null))
+        assertTrue(AetherExit.takesFinalMask("  "))
+        assertTrue(AetherExit.takesFinalMask("""{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}"""))
+        assertFalse(AetherExit.takesFinalMask("""{"tag":"proxy"}"""))
+        assertFalse(AetherExit.takesFinalMask("""{"tcp":[]}"""))
+        assertFalse(AetherExit.takesFinalMask("""{"tcp":[{"type":"noise","settings":{}}]}"""))
+    }
+
+    @Test
     fun theKeyOfAnExitNodeTellsAChangedProfileOfTheSameName() {
         val germany = ProfileItem.create(EConfigType.VLESS).apply { remarks = "germany"; server = "203.0.113.7"; serverPort = "443" }
         // A subscription's update gives the profile of the name another server, and a new guid the content does not hold.

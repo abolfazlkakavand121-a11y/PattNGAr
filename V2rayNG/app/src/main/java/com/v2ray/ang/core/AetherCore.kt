@@ -1,7 +1,6 @@
 package com.v2ray.ang.core
 
 import androidx.annotation.StringRes
-import com.google.gson.JsonParser
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ByName
@@ -399,11 +398,7 @@ data class AetherExit(
          * without the error JsonUtil logs for text that is not one, since a typing mistake is no failure. The Aether
          * editor and the WARP keys page check theirs alike.
          */
-        fun takesFinalMask(finalMask: String?): Boolean = finalMask.isNullOrBlank() || try {
-            JsonParser.parseString(finalMask).isJsonObject
-        } catch (_: RuntimeException) {
-            false
-        }
+        fun takesFinalMask(finalMask: String?): Boolean = FinalMaskValidation.isValid(finalMask)
 
         /**
          * The exit-node of an Aether hop of a proxy chain that dials out through [hops]: the hops on its

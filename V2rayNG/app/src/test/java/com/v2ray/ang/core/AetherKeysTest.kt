@@ -574,7 +574,7 @@ class AetherKeysTest {
         assertEquals(AetherKeys.Problem.INVALID_ECH_DOMAIN, AetherKeys.problem(fine.copy(ech = true, echDomain = "-x")))
         assertNull(AetherKeys.problem(fine.copy(ech = true, echDns = "", echDomain = "")))
         assertEquals(AetherKeys.Problem.INVALID_FINAL_MASK, AetherKeys.problem(fine.copy(finalMask = "{not json")))
-        assertNull(AetherKeys.problem(fine.copy(finalMask = """{"tcp": []}""", dialMode = "anything")))
+        assertNull(AetherKeys.problem(fine.copy(finalMask = """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""", dialMode = "anything")))
     }
 
     @Test
@@ -596,11 +596,13 @@ class AetherKeysTest {
     }
 
     @Test
-    fun anExitNodeTakesABlankFinalMaskOrAJsonObject() {
+    fun anExitNodeTakesOnlyBlankOrARecognizedFinalMask() {
         assertTrue(AetherExit.takesFinalMask(null))
         assertTrue(AetherExit.takesFinalMask(" "))
-        assertTrue(AetherExit.takesFinalMask("""{"tcp": []}"""))
+        assertTrue(AetherExit.takesFinalMask("""{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}"""))
         assertFalse(AetherExit.takesFinalMask("[]"))
+        assertFalse(AetherExit.takesFinalMask("""{"tag":"proxy"}"""))
+        assertFalse(AetherExit.takesFinalMask("""{"tcp":[]}"""))
         assertFalse(AetherExit.takesFinalMask("{not json"))
         assertFalse(AetherExit.takesFinalMask("ForceIP"))
     }
@@ -630,7 +632,7 @@ class AetherKeysTest {
 
     @Test
     fun aProfileAsTheExitNodeLeavesTheFinalMaskAndTheDialModeOutOfUse() {
-        val noded = AetherKeysSettings(exitNode = "germany", finalMask = """{"tcp": []}""", dialMode = "ForceIP")
+        val noded = AetherKeysSettings(exitNode = "germany", finalMask = """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""", dialMode = "ForceIP")
         assertEquals(AetherExit(node = "germany"), noded.exit)
         assertEquals(AetherExit(node = "germany"), noded.copy(exitNode = " germany ").exit)
         assertNull(AetherKeys.problem(noded))
@@ -644,8 +646,8 @@ class AetherKeysTest {
 
     @Test
     fun theExitNodeTakesTheFinalMaskAndTheDialMode() {
-        val settings = AetherKeysSettings(finalMask = """{"tcp": []}""", dialMode = "ForceIP")
-        assertEquals(AetherExit("""{"tcp": []}""", "ForceIP"), settings.exit)
+        val settings = AetherKeysSettings(finalMask = """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""", dialMode = "ForceIP")
+        assertEquals(AetherExit("""{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""", "ForceIP"), settings.exit)
         assertEquals(AetherExit(), settings.copy(finalMask = " ", dialMode = "").exit)
     }
 }

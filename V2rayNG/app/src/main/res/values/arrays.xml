@@ -366,12 +366,28 @@
     <!-- The finalMasks the finalMask fields offer, by name, and at the same index the JSON a pick puts in the field:
          quoted, so that its spaces stay, with \n for a line break. -->
     <string-array name="final_mask_preset_names" translatable="false">
+        <item>tls-record-version-0301</item>
+        <item>tls-record-version-0302</item>
+        <item>tls-record-version-0303</item>
+        <item>tls-record-version-differential-0303-0301</item>
+        <item>tls-sni-before-extension</item>
+        <item>tls-sni-extension-header</item>
+        <item>tls-sni-mid-hostname</item>
+        <item>tls-sni-after-extension</item>
         <item>tlshello-0-len (0-104-1-0-0-114-1-1-11)</item>
         <item>tlshello (6-98-1-0-0-114-1-1-11)</item>
         <item>udp-noise (rnd-24-1200-1230)</item>
         <item>merge</item>
     </string-array>
     <string-array name="final_mask_preset_values" translatable="false">
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"recordVersion\": 769}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"recordVersion\": 770}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"recordVersion\": 771}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"splitAt\": 2, \"firstFragmentVersion\": 771, \"remainingFragmentVersion\": 769}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"before-extension\"}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"extension-header\"}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"mid-hostname\"}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"after-extension\"}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"fragment\", \"settings\": {\"packets\": \"tlshello\", \"lengths\": [\"0\", \"104\", \"1\"], \"delays\": [\"0\"], \"maxSplit\": \"0\"}},\n    {\"type\": \"fragment\", \"settings\": {\"packets\": \"1-1\", \"lengths\": [\"114\", \"1\"], \"delays\": [\"1\"], \"maxSplit\": \"11\"}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"fragment\", \"settings\": {\"packets\": \"tlshello\", \"lengths\": [\"6\", \"98\", \"1\"], \"delays\": [\"0\"], \"maxSplit\": \"0\"}},\n    {\"type\": \"fragment\", \"settings\": {\"packets\": \"1-1\", \"lengths\": [\"114\", \"1\"], \"delays\": [\"1\"], \"maxSplit\": \"11\"}}\n  ]\n}"</item>
         <item>"{\n  \"udp\": [\n    {\n      \"type\": \"noise\",\n      \"settings\": {\n        \"reset\": \"28\",\n        \"noise\": [\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"},\n          {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}, {\"rand\": \"1200-1230\", \"delay\": \"10\"}\n        ]\n      }\n    }\n  ]\n}"</item>
