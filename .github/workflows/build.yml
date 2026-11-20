@@ -302,7 +302,12 @@ jobs:
           exit 1
         fi
         "$APK_SIGNER" verify --verbose "${apks[0]}"
-        "$APK_SIGNER" verify --print-certs "${apks[0]}" | grep -q "Signer #1 certificate SHA-256 digest"
+        CERT_OUTPUT="$("$APK_SIGNER" verify --print-certs "${apks[0]}")"
+        if [[ "$CERT_OUTPUT" != *"Signer #1 certificate SHA-256 digest"* ]]; then
+          echo "::error::Could not read the CI-only release APK signing certificate"
+          exit 1
+        fi
+        printf '%s\n' "$CERT_OUTPUT"
         sha256sum "${apks[0]}"
 
     - name: Upload arm64-v8a validation APK
@@ -447,7 +452,8 @@ jobs:
           reference_cert=""
           for apk in "${apks[@]}"; do
             "$APK_SIGNER" verify --verbose "$apk"
-            cert="$("$APK_SIGNER" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+            cert_output="$("$APK_SIGNER" verify --print-certs "$apk")"
+            cert="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}' <<< "$cert_output")"
             if [[ -z "$cert" ]]; then
               echo "::error::Could not read signing certificate for $(basename "$apk")"
               exit 1

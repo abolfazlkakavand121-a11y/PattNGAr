@@ -47,6 +47,18 @@ class CoreOutboundBuilderTest {
     }
 
     @Test
+    fun updateOutboundFinalMaskRefusesAJsonObjectThatIsNotAFinalMask() {
+        val streamSettings = OutboundBean.StreamSettingsBean()
+
+        val failure = runCatching {
+            CoreOutboundBuilder.updateOutboundFinalMask(streamSettings, """{"tag":"proxy"}""")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertNull(streamSettings.finalmask)
+    }
+
+    @Test
     fun aMuxConcurrencyFieldThatHoldsNoNumberFallsBackToTheDefault() {
         assertEquals(16, CoreOutboundBuilder.muxConcurrency("16", 8))
         assertEquals(16, CoreOutboundBuilder.muxConcurrency(" 16 ", 8))

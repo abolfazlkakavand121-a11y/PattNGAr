@@ -3,6 +3,7 @@ package com.v2ray.ang.ui.server
 import android.app.Application
 import androidx.lifecycle.viewModelScope
 import com.v2ray.ang.R
+import com.v2ray.ang.core.FinalMaskValidation
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.ui.base.EditorOutcome
@@ -64,6 +65,9 @@ abstract class ProfileEditorViewModel(
      * stored as; a write the storage refused is told, see [WRITE_REFUSED].
      */
     protected suspend fun store(profile: ProfileItem): EditorOutcome {
+        if (!FinalMaskValidation.isValid(profile.finalMask)) {
+            return EditorOutcome.Refused(R.string.toast_malformed_json)
+        }
         stampSubscription(profile)
         guid = source.storeProfile(storedAs(), profile) ?: return WRITE_REFUSED
         return EditorOutcome.Saved(guid)
