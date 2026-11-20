@@ -34,6 +34,27 @@ jobs:
         submodules: 'recursive'
         fetch-depth: '0'
 
+    - name: Verify canonical agent guides against upstream master
+      shell: bash
+      run: |
+        set -euo pipefail
+        UPSTREAM_URL="https://github.com/2dust/v2rayNG.git"
+        if git remote get-url upstream >/dev/null 2>&1; then
+          test "$(git remote get-url upstream)" = "$UPSTREAM_URL"
+        else
+          git remote add upstream "$UPSTREAM_URL"
+        fi
+        git fetch upstream master
+        GUIDE_PATHS=(
+          ':(glob)**/AGENTS.md'
+          ':(glob)**/CLAUDE.md'
+          ':(glob)**/GEMINI.md'
+          '.github/copilot-instructions.md'
+        )
+        git diff upstream/master -- "${GUIDE_PATHS[@]}"
+        test -z "$(git diff --cached --name-only -- "${GUIDE_PATHS[@]}")"
+        test -z "$(git diff --name-only upstream/master...HEAD -- "${GUIDE_PATHS[@]}")"
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
