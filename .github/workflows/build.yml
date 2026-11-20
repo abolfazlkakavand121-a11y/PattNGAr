@@ -405,13 +405,32 @@ jobs:
             echo "::error::release_tag must use semantic version format, for example 2.4.2"
             exit 1
           fi
-          ./gradlew :app:assemblePlaystoreRelease -PpattngVersion="$PATTNG_VERSION"
+          # Aether, Psiphon and the pluggable transport are built for these three ABIs.
+        # 32-bit x86 is intentionally excluded until those native components support it.
+        ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS="arm64-v8a;armeabi-v7a;x86_64" -PpattngVersion="$PATTNG_VERSION"
 
-      - name: Verify APK signatures and prepare checksums
+      - name: Verify APK signatures, ABIs and prepare checksums
         shell: bash
+        env:
+          PATTNG_VERSION: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           APK_DIR="${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/release"
+          EXPECTED_ABIS=(arm64-v8a armeabi-v7a x86_64)
+          for abi in "${EXPECTED_ABIS[@]}"; do
+            apk="$APK_DIR/PattNG_${PATTNG_VERSION}_${abi}.apk"
+            if [[ ! -s "$apk" ]]; then
+              echo "::error::Missing release APK for supported ABI $abi"
+              exit 1
+            fi
+            entries="$(unzip -Z1 "$apk" | grep '^lib/' || true)"
+            for lib in libgojni.so libaether.so libpsiphon-tunnel-core.so liblyrebird.so libhev-socks5-tunnel.so libhevsockstun.so; do
+              if ! grep -qx "lib/$abi/$lib" <<< "$entries"; then
+                echo "::error::$(basename "$apk") lacks lib/$abi/$lib"
+                exit 1
+              fi
+            done
+          done
           APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
           test -x "$APK_SIGNER"
           shopt -s nullglob
