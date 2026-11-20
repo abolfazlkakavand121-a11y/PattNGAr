@@ -260,39 +260,126 @@ jobs:
         name: arm64-v8a-debug-validation
         path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/debug/*arm64-v8a*.apk
 
+    - name: Upload native libraries for signed release
+      uses: actions/upload-artifact@v7
+      if: ${{ success() }}
+      with:
+        name: pattng-native-libraries
+        path: ${{ github.workspace }}/V2rayNG/app/libs/
+        if-no-files-found: error
+        retention-days: 1
+
   sign-and-release:
     needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
     runs-on: ubuntu-26.04
-    if: false # Disabled: validation APK is debug-signed, not a distributable release
+    permissions:
+      contents: write
 
     steps:
-      - name: Download APK artifacts
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          submodules: 'false'
+
+      - name: Download native libraries built and tested by the validation job
         uses: actions/download-artifact@v8
         with:
-          path: release
+          name: pattng-native-libraries
+          path: ${{ github.workspace }}/V2rayNG/app/libs/
 
-      - name: Sign APK files
-        run: |
-          # Quiet: a plain import prints the key's user ID, name and email, into the public log.
-          printf '%s' "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --quiet --import
-          KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
-          mkdir -p release-files
-
-          find release -type f -name '*.apk' | while read apk; do
-            cp "$apk" release-files/
-            gpg --batch --yes --local-user "$KEY" --detach-sign --output "release-files/$(basename "$apk").sig" "$apk"
-          done
-
-          gpg --armor --export "$KEY" > release-files/PattNG-public-key.asc
-
-      - name: Upload APKs, signatures and public key to release
-        uses: svenstaro/upload-release-action@v2
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
         with:
-          file: release-files/*
-          tag: ${{ inputs.release_tag }}
-          release_name: PattNG v${{ inputs.release_tag }}
-          body: "."
-          target_commit: ${{ github.sha }}
-          file_glob: true
-          prerelease: true
-          overwrite: true
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '14742923'
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
+          sed -i '10i\\
+              ndkVersion = "30.0.16248370"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Prepare Android release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          KEYSTORE_DIR="$RUNNER_TEMP/pattng-signing"
+          mkdir -p "$KEYSTORE_DIR"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_DIR/release.jks"
+          test -s "$KEYSTORE_DIR/release.jks"
+          chmod 600 "$KEYSTORE_DIR/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_DIR/release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build signed Play Store release APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ${{ github.workspace }}/V2rayNG
+          printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          ./gradlew :app:assemblePlaystoreRelease -PpattngVersion="${{ inputs.release_tag }}"
+
+      - name: Verify APK signatures and prepare checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_DIR="${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/release"
+          APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          test -x "$APK_SIGNER"
+          shopt -s nullglob
+          apks=("$APK_DIR"/*.apk)
+          if [[ "${#apks[@]}" -lt 1 ]]; then
+            echo "::error::No signed release APKs were produced"
+            exit 1
+          fi
+          mkdir -p release-files
+          reference_cert=""
+          for apk in "${apks[@]}"; do
+            "$APK_SIGNER" verify --verbose "$apk"
+            cert="$("$APK_SIGNER" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+            if [[ -z "$cert" ]]; then
+              echo "::error::Could not read signing certificate for $(basename "$apk")"
+              exit 1
+            fi
+            if [[ -z "$reference_cert" ]]; then
+              reference_cert="$cert"
+            elif [[ "$cert" != "$reference_cert" ]]; then
+              echo "::error::Release APKs were signed with different certificates"
+              exit 1
+            fi
+            cp "$apk" release-files/
+          done
+          (cd release-files && sha256sum *.apk > SHA256SUMS)
+          echo "Verified ${#apks[@]} signed APK(s) with certificate SHA-256 $reference_cert"
+
+      - name: Publish signed GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: PattNG v${{ inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: false
+          files: release-files/*
