@@ -134,7 +134,7 @@ class AetherKeysViewModelTest {
         viewModel.setEchDns("https://1.1.1.1/dns-query")
         viewModel.setEchDomain("example.com")
         viewModel.setFingerprint(AetherFingerprint.SEMI_PYTHON)
-        viewModel.setFinalMask("""{"tcp": []}""")
+        viewModel.setFinalMask("""{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""")
         viewModel.setDialMode("ForceIP")
 
         val expected = AetherKeysSettings(
@@ -146,7 +146,7 @@ class AetherKeysViewModelTest {
             echDns = "https://1.1.1.1/dns-query",
             echDomain = "example.com",
             fingerprint = AetherFingerprint.SEMI_PYTHON,
-            finalMask = """{"tcp": []}""",
+            finalMask = """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""",
             dialMode = "ForceIP",
         )
         assertEquals(expected, viewModel.settings)
@@ -200,7 +200,7 @@ class AetherKeysViewModelTest {
     @Test
     fun gettingKeysRunsTheSettingsAndShowsTheNewKeysOnceTheyAreInPlace() {
         val pending = CompletableDeferred<List<AetherKey>?>()
-        source.stored = AetherKeysSettings(kind = AetherKeyKind.GOOL, fingerprint = AetherFingerprint.FIREFOX, finalMask = """{"tcp": []}""", dialMode = "ForceIP")
+        source.stored = AetherKeysSettings(kind = AetherKeyKind.GOOL, fingerprint = AetherFingerprint.FIREFOX, finalMask = """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""", dialMode = "ForceIP")
         source.renewer = { onOutput ->
             onOutput("[2026-10-03T10:00:00.000Z INFO  aether] [+] identities ready: wireguard, wireguard inner")
             pending.await()
@@ -211,7 +211,7 @@ class AetherKeysViewModelTest {
         viewModel.getKeys()
         assertTrue(viewModel.isRenewing.value)
         assertEquals(
-            listOf(Run(AetherKeyKind.GOOL, AetherKeys.arguments(source.stored), AetherExit("""{"tcp": []}""", "ForceIP"))),
+            listOf(Run(AetherKeyKind.GOOL, AetherKeys.arguments(source.stored), AetherExit("""{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""", "ForceIP"))),
             source.runs
         )
         // The settings stay as the run took them while it goes on.
