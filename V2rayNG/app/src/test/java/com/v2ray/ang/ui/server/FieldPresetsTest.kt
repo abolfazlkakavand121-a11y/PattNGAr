@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.server
 
 import com.v2ray.ang.AppResources
 import com.v2ray.ang.core.AetherExit
+import com.v2ray.ang.core.FinalMaskValidation
 import com.v2ray.ang.ui.server.FieldPresets.Match
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -164,6 +165,7 @@ class FieldPresetsTest {
         val listed = FieldPresets(values, Match.JSON)
         values.forEachIndexed { index, value ->
             assertTrue(AetherExit.takesFinalMask(value), value)
+            assertTrue(FinalMaskValidation.isValid(value), value)
             assertEquals(index, listed.indexOf(value))
         }
     }
