@@ -63,14 +63,23 @@ jobs:
         packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
 
     - name: Install NDK
+      shell: bash
       run: |
-        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-          --channel=0 \
-          --install "ndk;30.0.16248370"
-        echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
-        sed -i '10i\
-        \
-            ndkVersion = "30.0.16248370"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
+        set -euo pipefail
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
+        echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+        python3 - <<'PY'
+        from pathlib import Path
+        path = Path("V2rayNG/app/build.gradle.kts")
+        content = path.read_text()
+        marker = '    ndkVersion = "30.0.16248370"'
+        if marker not in content:
+            needle = "android {\n"
+            if content.count(needle) != 1:
+                raise SystemExit("Could not locate the Android Gradle block exactly once")
+            content = content.replace(needle, needle + marker + "\n", 1)
+            path.write_text(content)
+        PY
 
     - name: Restore cached libhevtun
       id: cache-libhevtun-restore
