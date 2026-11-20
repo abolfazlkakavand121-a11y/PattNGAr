@@ -201,31 +201,23 @@ jobs:
         distribution: 'temurin'
         java-version: '21'
 
-    - name: Decode Keystore
-      uses: timheuer/base64-to-file@v2.0.0
-      id: android_keystore
-      with:
-        fileName: "android_keystore.jks"
-        encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
-
-    - name: Build APK
+    - name: Build APK (debug-signed validation build)
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        # The JVM unit tests are the only automated check of the Kotlin logic; a failure stops the
-        # build before anything is assembled or signed.
+        # Run unit tests, then produce an installable debug-signed APK for validation.
+        # Permanent release signing is intentionally disabled until a private keystore is configured.
         ./gradlew :app:testPlaystoreDebugUnitTest
-        ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a -PpattngVersion="${{ inputs.release_tag }}" -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
-    
+        ./gradlew :app:assemblePlaystoreDebug -PABI_FILTERS=arm64-v8a
+
     - name: Check the native libraries in the APKs
       run: |
-        # Looked into as ZIP files: every ABI the Aether core is built for has to carry the core, its
-        # Psiphon client and its pluggable transport, and each APK's native files are listed for the record.
+        # Validate the arm64 APK contains the expected native libraries before uploading it.
         shopt -s nullglob
-        apks=(${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/release/*arm64-v8a*.apk)
+        apks=(${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/debug/*arm64-v8a*.apk)
         if [ "${#apks[@]}" -ne 1 ]; then
-          echo "::error::Expected exactly one Play Store arm64-v8a APK, found ${#apks[@]}"
+          echo "::error::Expected exactly one Play Store arm64-v8a debug APK, found ${#apks[@]}"
           exit 1
         fi
         apk="${apks[0]}"
@@ -239,17 +231,17 @@ jobs:
           fi
         done
 
-    - name: Upload arm64-v8a APK
+    - name: Upload arm64-v8a validation APK
       uses: actions/upload-artifact@v7
-      if: ${{  success() }}
+      if: ${{ success() }}
       with:
-        name: arm64-v8a
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*arm64-v8a*.apk
+        name: arm64-v8a-debug-validation
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/debug/*arm64-v8a*.apk
 
   sign-and-release:
     needs: build
     runs-on: ubuntu-26.04
-    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    if: false # Disabled: validation APK is debug-signed, not a distributable release
 
     steps:
       - name: Download APK artifacts
