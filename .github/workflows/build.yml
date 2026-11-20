@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - master
+      - my-releases
 
 permissions:
   contents: write
@@ -156,21 +157,43 @@ jobs:
       run: |
         bash fetch-psiphon-servers.sh
 
-    - name: Fetch AndroidLibXrayLite tag
-      run: |
-        pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
-        echo "Current tag in this repo: $CURRENT_TAG"
-        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
-
-    - name: Download libv2ray
-      uses: robinraju/release-downloader@v1.13
+    - name: Checkout custom AndroidLibXrayLite
+      uses: actions/checkout@v7
       with:
-        repository: 'patterniha/AndroidLibXrayLite'
-        tag: ${{ env.CURRENT_TAG }}
-        fileName: 'libv2ray.aar'
-        out-file-path: V2rayNG/app/libs/
+        repository: abolfazlkakavand121-a11y/AndroidLibXrayLite
+        ref: d9a5f6de85db7e18312e7f884c946b23202e6b8f
+        path: AndroidLibXrayLite-custom
+        persist-credentials: false
+
+    - name: Install AndroidLib Go toolchain
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: AndroidLibXrayLite-custom/go.mod
+        cache-dependency-path: AndroidLibXrayLite-custom/go.sum
+
+    - name: Install gomobile and AndroidLib NDK
+      working-directory: AndroidLibXrayLite-custom
+      run: |
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        echo "$HOME/go/bin" >> $GITHUB_PATH
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;29.0.14206865"
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
+
+    - name: Build custom libv2ray AAR
+      working-directory: AndroidLibXrayLite-custom
+      run: |
+        mkdir -p assets data
+        bash gen_assets.sh download
+        cp -v data/*.dat assets/
+        gomobile init
+        go mod tidy
+        gomobile bind -v -androidapi 29 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' ./
+        test -s libv2ray.aar
+        cp -v libv2ray.aar ../V2rayNG/app/libs/libv2ray.aar
+
+    - name: Restore PattNG NDK
+      run: |
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
 
     - name: Setup Java
       uses: actions/setup-java@v6.2.0
@@ -193,29 +216,28 @@ jobs:
         # The JVM unit tests are the only automated check of the Kotlin logic; a failure stops the
         # build before anything is assembled or signed.
         ./gradlew :app:testPlaystoreDebugUnitTest
-        ./gradlew licenseFdroidReleaseReport
-        ./gradlew assembleRelease -PpattngVersion="${{ inputs.release_tag }}" -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
+        ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a -PpattngVersion="${{ inputs.release_tag }}" -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
     
     - name: Check the native libraries in the APKs
       run: |
         # Looked into as ZIP files: every ABI the Aether core is built for has to carry the core, its
         # Psiphon client and its pluggable transport, and each APK's native files are listed for the record.
-        status=0
-        for apk in ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*.apk; do
-          entries=$(unzip -Z1 "$apk" | grep '^lib/' || true)
-          echo "$(basename "$apk"):"
-          echo "$entries" | sed 's/^/  /'
-          for abi in arm64-v8a armeabi-v7a x86_64; do
-            echo "$entries" | grep -q "^lib/$abi/" || continue
-            for lib in libaether.so libpsiphon-tunnel-core.so liblyrebird.so; do
-              if ! echo "$entries" | grep -qx "lib/$abi/$lib"; then
-                echo "::error::$(basename "$apk") lacks lib/$abi/$lib"
-                status=1
-              fi
-            done
-          done
+        shopt -s nullglob
+        apks=(${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/release/*arm64-v8a*.apk)
+        if [ "${#apks[@]}" -ne 1 ]; then
+          echo "::error::Expected exactly one Play Store arm64-v8a APK, found ${#apks[@]}"
+          exit 1
+        fi
+        apk="${apks[0]}"
+        entries=$(unzip -Z1 "$apk" | grep '^lib/' || true)
+        echo "$(basename "$apk"):"
+        echo "$entries" | sed 's/^/  /'
+        for lib in libaether.so libpsiphon-tunnel-core.so liblyrebird.so; do
+          if ! echo "$entries" | grep -qx "lib/arm64-v8a/$lib"; then
+            echo "::error::$(basename "$apk") lacks lib/arm64-v8a/$lib"
+            exit 1
+          fi
         done
-        exit $status
 
     - name: Upload arm64-v8a APK
       uses: actions/upload-artifact@v7
@@ -223,27 +245,6 @@ jobs:
       with:
         name: arm64-v8a
         path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*arm64-v8a*.apk
-
-    - name: Upload armeabi-v7a APK
-      uses: actions/upload-artifact@v7
-      if: ${{  success() }}
-      with:
-        name: armeabi-v7a
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*armeabi-v7a*.apk
-
-    - name: Upload x86 APK
-      uses: actions/upload-artifact@v7
-      if: ${{  success() }}
-      with:
-        name: x86-apk
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*x86*.apk
-
-    - name: Upload universal APK
-      uses: actions/upload-artifact@v7
-      if: ${{ success() }}
-      with:
-        name: universal-apk
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*universal*.apk
 
   sign-and-release:
     needs: build
