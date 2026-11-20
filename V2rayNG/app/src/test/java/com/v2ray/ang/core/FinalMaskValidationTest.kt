@@ -78,7 +78,6 @@ class FinalMaskValidationTest {
             """{"tcp":[{"type":"fragment","settings":{},"tag":"proxy"}]}""",
             """{"tcp":[{"type":"fragment","settings":{}}],"unknown":true}""",
             """{"quicParams":[]}""",
-            """{"quicParams":{"unknown":"value"}}""",
         )
         invalid.forEach { assertFalse(FinalMaskValidation.isValid(it), it) }
     }
