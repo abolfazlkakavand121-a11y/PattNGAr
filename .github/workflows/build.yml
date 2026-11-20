@@ -270,6 +270,7 @@ jobs:
         KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
         keytool -genkeypair -noprompt \
           -keystore "$KEYSTORE_PATH" \
+          -storetype JKS \
           -storepass "$KEYSTORE_PASSWORD" \
           -alias pattng-ci-smoke \
           -keypass "$KEYSTORE_PASSWORD" \
