@@ -139,8 +139,23 @@ class FieldPresetsTest {
     fun theFinalMaskFieldsOfferTheGivenFinalMasksEachLaidOutAsWrittenUnderItsName() {
         val names = AppResources.stringArray("final_mask_preset_names")
         val values = AppResources.stringArray("final_mask_preset_values").map(::readAsAapt)
-        assertEquals(listOf("tlshello-0-len (0-104-1-0-0-114-1-1-11)", "tlshello (6-98-1-0-0-114-1-1-11)", "udp-noise (rnd-24-1200-1230)", "merge"), names)
-        assertEquals(listOf(TLSHELLO_0_LEN, TLSHELLO, UDP_NOISE, MERGE), values)
+        assertEquals(
+            listOf(
+                "tls-record-version-0301",
+                "tls-record-version-0303",
+                "tls-sni-before-extension",
+                "tls-sni-mid-hostname",
+                "tlshello-0-len (0-104-1-0-0-114-1-1-11)",
+                "tlshello (6-98-1-0-0-114-1-1-11)",
+                "udp-noise (rnd-24-1200-1230)",
+                "merge"
+            ),
+            names
+        )
+        assertEquals(
+            listOf(TLS_RECORD_VERSION_0301, TLS_RECORD_VERSION_0303, TLS_SNI_BEFORE_EXTENSION, TLS_SNI_MID_HOSTNAME, TLSHELLO_0_LEN, TLSHELLO, UDP_NOISE, MERGE),
+            values
+        )
         // Each is one an exit-node takes, as an outbound does, and the list tells each apart from the others.
         val listed = FieldPresets(values, Match.JSON)
         values.forEachIndexed { index, value ->
@@ -210,6 +225,38 @@ class FieldPresetsTest {
     }
 
     private companion object {
+        val TLS_RECORD_VERSION_0301 = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"recordVersion": 769}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_RECORD_VERSION_0303 = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"recordVersion": 771}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_BEFORE_EXTENSION = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "before-extension"}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_MID_HOSTNAME = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "mid-hostname"}}
+              ]
+            }
+        """.trimIndent()
+
         const val REAL_FIREFOX = "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:TLS_RSA_WITH_AES_128_GCM_SHA256:TLS_RSA_WITH_AES_256_GCM_SHA384:TLS_RSA_WITH_AES_128_CBC_SHA:TLS_RSA_WITH_AES_256_CBC_SHA"
 
         const val SEMI_PYTHON = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
