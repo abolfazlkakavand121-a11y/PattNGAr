@@ -17,9 +17,14 @@ class FinalMaskValidationTest {
     fun acceptsRecognizedTcpAndTlsRecordMasks() {
         val masks = listOf(
             """{"tcp":[{"type":"tls-record","settings":{"recordVersion":769}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"recordVersion":770}}]}""",
             """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771}}]}""",
             """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"before-extension"}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"extension-header"}}]}""",
             """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"mid-hostname"}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"after-extension"}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"splitAt":2,"firstFragmentVersion":771,"remainingFragmentVersion":769}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{}}]}""",
             """{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","length":"100-200"}}]}""",
             """{"tcp":[{"type":"merge","settings":{}}]}""",
         )
@@ -38,7 +43,6 @@ class FinalMaskValidationTest {
         assertTrue(FinalMaskValidation.isValid("""{"tcp":[],"udp":[{"type":"noise"}]}"""))
     }
 
-
     @Test
     fun acceptsAddressFamilySpecificMasksAndTheCompleteQuicParameterShape() {
         assertTrue(FinalMaskValidation.isValid("""{"tcp4":[{"type":"tls-record","settings":{"recordVersion":771}}]}"""))
@@ -52,6 +56,30 @@ class FinalMaskValidationTest {
             )
         )
         assertTrue(FinalMaskValidation.isValid("""{"tcp":null,"tcp4":[{"type":"fragment","settings":{}}]}"""))
+    }
+
+    @Test
+    fun rejectsInvalidTlsRecordSettingsBeforeTheyReachXray() {
+        val invalid = listOf(
+            """{"tcp":[{"type":"tls-record","settings":{"recordVersion":768}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"recordVersion":772}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"recordVersion":771,"splitAt":2}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"recordVersion":"771"}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"unknown"}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"before-extension","splitAt":2}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"mid-hostname","firstFragmentVersion":771}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"firstFragmentVersion":771}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"remainingFragmentVersion":769}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"firstFragmentVersion":772,"remainingFragmentVersion":769}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"firstFragmentVersion":771,"remainingFragmentVersion":768}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"splitAt":513,"firstFragmentVersion":771,"remainingFragmentVersion":769}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"splitAt":-1}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"splitAt":1.5}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"firstFragmentVersion":771,"remainingFragmentVersion":769,"recordVersion":771}}]}""",
+            """{"tcp":[{"type":"TLS-record","settings":{"recordVersion":771}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"unexpected":true}}]}""",
+        )
+        invalid.forEach { assertFalse(FinalMaskValidation.isValid(it), it) }
     }
 
     @Test
