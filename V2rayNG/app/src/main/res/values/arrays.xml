@@ -369,6 +369,7 @@
         <item>tls-record-version-0301</item>
         <item>tls-record-version-0302</item>
         <item>tls-record-version-0303</item>
+        <item>tls-record-version-differential-0303-0301</item>
         <item>tls-sni-before-extension</item>
         <item>tls-sni-extension-header</item>
         <item>tls-sni-mid-hostname</item>
@@ -382,6 +383,7 @@
         <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"recordVersion\": 769}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"recordVersion\": 770}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"recordVersion\": 771}}\n  ]\n}"</item>
+        <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"splitAt\": 2, \"firstFragmentVersion\": 771, \"remainingFragmentVersion\": 769}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"before-extension\"}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"extension-header\"}}\n  ]\n}"</item>
         <item>"{\n  \"tcp\": [\n    {\"type\": \"tls-record\", \"settings\": {\"sniSplit\": \"mid-hostname\"}}\n  ]\n}"</item>
