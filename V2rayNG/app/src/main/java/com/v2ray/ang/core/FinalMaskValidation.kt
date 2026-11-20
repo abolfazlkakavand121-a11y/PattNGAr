@@ -152,7 +152,7 @@ object FinalMaskValidation {
             firstVersion == INVALID_INT || remainingVersion == INVALID_INT
         ) return false
 
-        if (sniElement != null) {
+        if (sniElement != null && !sniElement.isJsonNull) {
             if (!sniElement.isJsonPrimitive || !sniElement.asJsonPrimitive.isString) return false
             val mode = sniElement.asString
             if (mode.isNotEmpty() && mode !in sniSplitModes) return false
@@ -177,6 +177,7 @@ object FinalMaskValidation {
     }
 
     private fun readInt(element: JsonElement): Int {
+        if (element.isJsonNull) return 0
         if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) return INVALID_INT
         return element.asString.toIntOrNull() ?: INVALID_INT
     }

@@ -25,6 +25,9 @@ class FinalMaskValidationTest {
             """{"tcp":[{"type":"tls-record","settings":{"sniSplit":"after-extension"}}]}""",
             """{"tcp":[{"type":"tls-record","settings":{"splitAt":2,"firstFragmentVersion":771,"remainingFragmentVersion":769}}]}""",
             """{"tcp":[{"type":"tls-record","settings":{}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"recordVersion":null}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"splitAt":null}}]}""",
+            """{"tcp":[{"type":"tls-record","settings":{"sniSplit":null}}]}""",
             """{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","length":"100-200"}}]}""",
             """{"tcp":[{"type":"merge","settings":{}}]}""",
         )
