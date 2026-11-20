@@ -293,6 +293,7 @@ jobs:
           echo "ANDROID_KEY_ALIAS=pattng-ci-smoke"
           echo "ANDROID_KEY_PASSWORD=$KEYSTORE_PASSWORD"
         } >> "$GITHUB_ENV"
+        echo "::add-mask::$KEYSTORE_PASSWORD"
 
     - name: Build and verify a CI-only signed release APK
       shell: bash
@@ -308,12 +309,9 @@ jobs:
           exit 1
         fi
         "$APK_SIGNER" verify --verbose "${apks[0]}"
-        CERT_OUTPUT="$("$APK_SIGNER" verify --print-certs "${apks[0]}" 2>&1)"
-        if [[ "$CERT_OUTPUT" != *"Signer #1 certificate SHA-256 digest"* ]]; then
-          echo "::error::Could not read the CI-only release APK signing certificate"
-          exit 1
-        fi
-        printf '%s\n' "$CERT_OUTPUT"
+        # apksigner's human-readable certificate labels vary across build-tools
+        # versions/locales. The cryptographic verification above is authoritative.
+        "$APK_SIGNER" verify --print-certs "${apks[0]}"
         sha256sum "${apks[0]}"
 
     - name: Upload arm64-v8a validation APK
