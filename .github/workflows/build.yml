@@ -296,10 +296,22 @@ jobs:
           packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
 
       - name: Install NDK
+        shell: bash
         run: |
+          set -euo pipefail
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
-          sed -i '10i\\
-              ndkVersion = "30.0.16248370"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("V2rayNG/app/build.gradle.kts")
+          content = path.read_text()
+          marker = '    ndkVersion = "30.0.16248370"'
+          if marker not in content:
+              needle = "android {\n"
+              if content.count(needle) != 1:
+                  raise SystemExit("Could not locate the Android Gradle block exactly once")
+              content = content.replace(needle, needle + marker + "\n", 1)
+              path.write_text(content)
+          PY
 
       - name: Setup Java
         uses: actions/setup-java@v6.2.0
@@ -334,12 +346,18 @@ jobs:
 
       - name: Build signed Play Store release APKs
         shell: bash
+        env:
+          PATTNG_VERSION: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           cd ${{ github.workspace }}/V2rayNG
-          printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           chmod 755 gradlew
-          ./gradlew :app:assemblePlaystoreRelease -PpattngVersion="${{ inputs.release_tag }}"
+          if [[ ! "$PATTNG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release_tag must use semantic version format, for example 2.4.2"
+            exit 1
+          fi
+          ./gradlew :app:assemblePlaystoreRelease -PpattngVersion="$PATTNG_VERSION"
 
       - name: Verify APK signatures and prepare checksums
         shell: bash
