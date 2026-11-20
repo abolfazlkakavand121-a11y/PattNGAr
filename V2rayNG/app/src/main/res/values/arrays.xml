@@ -368,6 +368,8 @@
     <string-array name="final_mask_preset_names" translatable="false">
         <item>tls-record-version-0301</item>
         <item>tls-record-version-0303</item>
+        <item>tls-sni-before-extension</item>
+        <item>tls-sni-mid-hostname</item>
         <item>tlshello-0-len (0-104-1-0-0-114-1-1-11)</item>
         <item>tlshello (6-98-1-0-0-114-1-1-11)</item>
         <item>udp-noise (rnd-24-1200-1230)</item>
