@@ -35,6 +35,7 @@ import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
 import com.v2ray.ang.core.EchOutbound
+import com.v2ray.ang.core.FinalMaskValidation
 import com.v2ray.ang.core.TlsSettingsCheck
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
@@ -529,7 +530,7 @@ abstract class BaseServerActivity : BaseComponentActivity() {
             toast(R.string.server_lab_xhttp_extra)
             return false
         }
-        if (!config.finalMask.isNullOrBlank() && JsonUtil.parseString(config.finalMask) == null) {
+        if (!FinalMaskValidation.isValid(config.finalMask)) {
             toast(R.string.server_lab_final_mask)
             return false
         }
