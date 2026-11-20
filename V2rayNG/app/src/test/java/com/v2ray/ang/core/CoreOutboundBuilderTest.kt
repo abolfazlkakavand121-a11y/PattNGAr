@@ -1,5 +1,6 @@
 package com.v2ray.ang.core
 
+import android.util.Log
 import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.V2rayConfig.OutboundBean
@@ -40,7 +41,9 @@ class CoreOutboundBuilderTest {
             finalMask = """{"tag":"proxy"}"""
         }
 
-        assertNull(CoreOutboundBuilder.convert(profile))
+        mockStatic(Log::class.java).use {
+            assertNull(CoreOutboundBuilder.convert(profile))
+        }
     }
 
     @Test
