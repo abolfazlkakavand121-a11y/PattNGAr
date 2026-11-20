@@ -406,8 +406,8 @@ jobs:
             exit 1
           fi
           # Aether, Psiphon and the pluggable transport are built for these three ABIs.
-        # 32-bit x86 is intentionally excluded until those native components support it.
-        ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS="arm64-v8a;armeabi-v7a;x86_64" -PpattngVersion="$PATTNG_VERSION"
+          # 32-bit x86 is intentionally excluded until those native components support it.
+          ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS="arm64-v8a;armeabi-v7a;x86_64" -PpattngVersion="$PATTNG_VERSION"
 
       - name: Verify APK signatures, ABIs and prepare checksums
         shell: bash
