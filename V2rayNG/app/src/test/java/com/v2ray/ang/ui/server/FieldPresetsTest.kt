@@ -144,7 +144,9 @@ class FieldPresetsTest {
                 "tls-record-version-0301",
                 "tls-record-version-0303",
                 "tls-sni-before-extension",
+                "tls-sni-extension-header",
                 "tls-sni-mid-hostname",
+                "tls-sni-after-extension",
                 "tlshello-0-len (0-104-1-0-0-114-1-1-11)",
                 "tlshello (6-98-1-0-0-114-1-1-11)",
                 "udp-noise (rnd-24-1200-1230)",
@@ -153,7 +155,7 @@ class FieldPresetsTest {
             names
         )
         assertEquals(
-            listOf(TLS_RECORD_VERSION_0301, TLS_RECORD_VERSION_0303, TLS_SNI_BEFORE_EXTENSION, TLS_SNI_MID_HOSTNAME, TLSHELLO_0_LEN, TLSHELLO, UDP_NOISE, MERGE),
+            listOf(TLS_RECORD_VERSION_0301, TLS_RECORD_VERSION_0303, TLS_SNI_BEFORE_EXTENSION, TLS_SNI_EXTENSION_HEADER, TLS_SNI_MID_HOSTNAME, TLS_SNI_AFTER_EXTENSION, TLSHELLO_0_LEN, TLSHELLO, UDP_NOISE, MERGE),
             values
         )
         // Each is one an exit-node takes, as an outbound does, and the list tells each apart from the others.
@@ -249,10 +251,26 @@ class FieldPresetsTest {
             }
         """.trimIndent()
 
+        val TLS_SNI_EXTENSION_HEADER = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "extension-header"}}
+              ]
+            }
+        """.trimIndent()
+
         val TLS_SNI_MID_HOSTNAME = """
             {
               "tcp": [
                 {"type": "tls-record", "settings": {"sniSplit": "mid-hostname"}}
+              ]
+            }
+        """.trimIndent()
+
+        val TLS_SNI_AFTER_EXTENSION = """
+            {
+              "tcp": [
+                {"type": "tls-record", "settings": {"sniSplit": "after-extension"}}
               ]
             }
         """.trimIndent()
