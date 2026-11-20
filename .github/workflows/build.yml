@@ -238,7 +238,7 @@ jobs:
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
         # Run unit tests, then produce an installable debug-signed APK for validation.
-        # Permanent release signing is intentionally disabled until a private keystore is configured.
+        # This is a debug-only validation APK. Production release signing is handled by sign-and-release.
         ./gradlew :app:testPlaystoreDebugUnitTest
         ./gradlew :app:assemblePlaystoreDebug -PABI_FILTERS=arm64-v8a
 
@@ -255,12 +255,50 @@ jobs:
         entries=$(unzip -Z1 "$apk" | grep '^lib/' || true)
         echo "$(basename "$apk"):"
         echo "$entries" | sed 's/^/  /'
-        for lib in libaether.so libpsiphon-tunnel-core.so liblyrebird.so; do
+        for lib in libgojni.so libaether.so libpsiphon-tunnel-core.so liblyrebird.so; do
           if ! echo "$entries" | grep -qx "lib/arm64-v8a/$lib"; then
             echo "::error::$(basename "$apk") lacks lib/arm64-v8a/$lib"
             exit 1
           fi
         done
+
+    - name: Create a temporary CI-only Android signing key
+      shell: bash
+      run: |
+        set -euo pipefail
+        KEYSTORE_PATH="$RUNNER_TEMP/pattng-ci-smoke.jks"
+        KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
+        keytool -genkeypair -noprompt \
+          -keystore "$KEYSTORE_PATH" \
+          -storepass "$KEYSTORE_PASSWORD" \
+          -alias pattng-ci-smoke \
+          -keypass "$KEYSTORE_PASSWORD" \
+          -keyalg RSA -keysize 2048 -validity 2 \
+          -dname "CN=PattNG CI Signing Smoke Test"
+        chmod 600 "$KEYSTORE_PATH"
+        {
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH"
+          echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+          echo "ANDROID_KEY_ALIAS=pattng-ci-smoke"
+          echo "ANDROID_KEY_PASSWORD=$KEYSTORE_PASSWORD"
+        } >> "$GITHUB_ENV"
+
+    - name: Build and verify a CI-only signed release APK
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ github.workspace }}/V2rayNG"
+        ./gradlew :app:assemblePlaystoreRelease -PABI_FILTERS=arm64-v8a -PpattngVersion=2.4.2
+        APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+        shopt -s nullglob
+        apks=(app/build/outputs/apk/playstore/release/*arm64-v8a*.apk)
+        if [[ "${#apks[@]}" -ne 1 ]]; then
+          echo "::error::Expected exactly one CI-only signed arm64 release APK, found ${#apks[@]}"
+          exit 1
+        fi
+        "$APK_SIGNER" verify --verbose "${apks[0]}"
+        "$APK_SIGNER" verify --print-certs "${apks[0]}" | grep -q "Signer #1 certificate SHA-256 digest"
+        sha256sum "${apks[0]}"
 
     - name: Upload arm64-v8a validation APK
       uses: actions/upload-artifact@v7
